@@ -3,12 +3,10 @@ package be.multimedi;
 import be.multimedi.model.EPC;
 import be.multimedi.model.Property;
 import be.multimedi.model.PropertyType;
-import be.multimedi.repository.PropertyRepository;
-import be.multimedi.repository.PropertyRepositoryImpl;
-import org.h2.tools.Server;
+import be.multimedi.service.PropertyService;
+import be.multimedi.service.PropertyServiceImpl;
 
-import java.io.IOException;
-import java.sql.SQLException;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
@@ -16,27 +14,29 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class Main {
+
     private static final Scanner scanner = new Scanner(System.in);
 
     public static void main(String[] args) {
         Logger.getLogger("org.hibernate").setLevel(Level.SEVERE);
 
-        PropertyRepositoryImpl repo = new PropertyRepositoryImpl();
+        PropertyService service = new PropertyServiceImpl();
 
         try {
-            runMenu(repo);
+            runMenu(service);
         } finally {
-            repo.close();
+            service.close();
             System.out.println("Goodbye!");
         }
     }
 
-    private static void runMenu(PropertyRepository repo) {
+    private static void runMenu(PropertyService service) {
         while (true) {
             System.out.println("\n===== Real Estate Application =====");
             System.out.println("1. Register a new property");
             System.out.println("2. Show all properties");
             System.out.println("3. Search properties by address");
+            System.out.println("4. Select property and view/delete");
             System.out.println("0. Exit");
             System.out.print("Choose an option: ");
 
@@ -45,20 +45,24 @@ public class Main {
             switch (choice) {
                 case "1":
                     Property p = createPropertyFromUserInput();
-                    repo.save(p);
+                    service.registerProperty(p);
                     System.out.println("Property saved!");
                     break;
 
                 case "2":
-                    showAllProperties(repo);
+                    showAllProperties(service);
                     break;
 
                 case "3":
-                    askUserToSearchByAddress(repo);
+                    askUserToSearchByAddress(service);
+                    break;
+
+                case "4":
+                    selectPropertyFromListAndMaybeDelete(service);
                     break;
 
                 case "0":
-                    return; // exit the method → exit program
+                    return;
 
                 default:
                     System.out.println("Invalid choice, please try again.");
@@ -66,44 +70,36 @@ public class Main {
         }
     }
 
+    // ---------- CREATE PROPERTY ----------
+
     private static Property createPropertyFromUserInput() {
         Property property = new Property();
 
         System.out.print("Enter address: ");
-        String address = scanner.nextLine();
-        property.setAddress(address);
+        property.setAddress(scanner.nextLine());
 
         System.out.print("Enter selling price: ");
-        double price = Double.parseDouble(scanner.nextLine());
-        property.setPrice(price);
+        property.setPrice(Double.parseDouble(scanner.nextLine()));
 
-        // Property type
         System.out.println("Enter property type " +
                 Arrays.toString(PropertyType.values()) + " :");
-        PropertyType type = readPropertyType();
-        property.setType(type);
+        property.setType(readPropertyType());
 
-        // EPC
         System.out.println("Enter EPC " +
                 Arrays.toString(EPC.values()) + " :");
-        EPC epc = readEpc();
-        property.setEpc(epc);
+        property.setEpc(readEpc());
 
         System.out.print("Enter living area (interior m²): ");
-        int interiorArea = Integer.parseInt(scanner.nextLine());
-        property.setInteriorArea(interiorArea);
+        property.setInteriorArea(Integer.parseInt(scanner.nextLine()));
 
         System.out.print("Enter plot area (m²): ");
-        int plotArea = Integer.parseInt(scanner.nextLine());
-        property.setPlotArea(plotArea);
+        property.setPlotArea(Integer.parseInt(scanner.nextLine()));
 
         System.out.print("Enter number of bedrooms: ");
-        int nrBedrooms = Integer.parseInt(scanner.nextLine());
-        property.setNrBedrooms(nrBedrooms);
+        property.setNrBedrooms(Integer.parseInt(scanner.nextLine()));
 
         System.out.print("Enter number of bathrooms: ");
-        int nrBathrooms = Integer.parseInt(scanner.nextLine());
-        property.setNrBathrooms(nrBathrooms);
+        property.setNrBathrooms(Integer.parseInt(scanner.nextLine()));
 
         return property;
     }
@@ -122,8 +118,11 @@ public class Main {
 
     private static EPC readEpc() {
         while (true) {
-            String input = scanner.nextLine().trim().toUpperCase()
-                    .replace("+", "_PLUS"); // "A+" -> "A_PLUS"
+            String input = scanner.nextLine()
+                    .trim()
+                    .toUpperCase()
+                    .replace("+", "_PLUS");
+
             try {
                 return EPC.valueOf(input);
             } catch (IllegalArgumentException e) {
@@ -133,22 +132,85 @@ public class Main {
         }
     }
 
-    private static void showAllProperties(PropertyRepository repo) {
-        List<Property> properties = repo.findAll();
-        properties.forEach(System.out::println);
+    // ---------- DISPLAY / SEARCH ----------
+
+    private static void showAllProperties(PropertyService service) {
+        System.out.println("\n--- All Properties ---");
+        List<Property> properties = service.getAllProperties();
+
+        if (properties.isEmpty()) {
+            System.out.println("No properties found.");
+        } else {
+            properties.forEach(System.out::println);
+        }
     }
 
-    private static void askUserToSearchByAddress(PropertyRepository repo) {
-        System.out.print("\nEnter address search term: ");
+    private static void askUserToSearchByAddress(PropertyService service) {
+        System.out.print("\nEnter search term for address: ");
         String searchTerm = scanner.nextLine();
 
-        List<Property> results = repo.findByAddress(searchTerm);
+        List<Property> results = service.searchByAddress(searchTerm);
 
         if (results.isEmpty()) {
-            System.out.println("No properties found for search term: " + searchTerm);
+            System.out.println("No properties found for: " + searchTerm);
         } else {
-            System.out.println("Found properties:");
+            System.out.println("\n--- Search Results ---");
             results.forEach(System.out::println);
+        }
+    }
+
+    private static void selectPropertyFromListAndMaybeDelete(PropertyService service) {
+        List<Property> properties = service.getAllProperties();
+
+        if (properties.isEmpty()) {
+            System.out.println("No properties to select.");
+            return;
+        }
+
+        System.out.println("\n--- Select a Property ---");
+        for (int i = 0; i < properties.size(); i++) {
+            Property p = properties.get(i);
+            System.out.printf("%d) [id=%d] %s (%.2f €)%n",
+                    i + 1, p.getId(), p.getAddress(), p.getPrice());
+        }
+
+        System.out.print("Enter the id number of the property to view (or 0 to cancel): ");
+        String input = scanner.nextLine();
+
+        int index;
+        try {
+            index = Integer.parseInt(input);
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid number.");
+            return;
+        }
+
+        if (index == 0) {
+            System.out.println("Cancelled.");
+            return;
+        }
+
+        if (index < 1 || index > properties.size()) {
+            System.out.println("Invalid selection.");
+            return;
+        }
+
+        Property selected = properties.get(index - 1);
+
+        System.out.println("\n--- Property Details ---");
+        System.out.println(selected);
+
+        System.out.print("Do you want to delete this property? (y/n): ");
+        String answer = scanner.nextLine().trim().toLowerCase();
+
+        if (answer.equals("y") || answer.equals("yes")) {
+            service.deleteProperty(selected);
+            System.out.println("Property deleted.");
+
+            System.out.println("\nUpdated list of properties:");
+            showAllProperties(service);
+        } else {
+            System.out.println("Property was not deleted.");
         }
     }
 }
