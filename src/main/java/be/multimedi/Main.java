@@ -12,24 +12,57 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Main {
     private static final Scanner scanner = new Scanner(System.in);
 
     public static void main(String[] args) {
+        Logger.getLogger("org.hibernate").setLevel(Level.SEVERE);
 
         PropertyRepositoryImpl repo = new PropertyRepositoryImpl();
 
         try {
-            Property p = createPropertyFromUserInput();
-            repo.save(p);
-            System.out.println("Property saved!");
-
-            System.out.println("\nAll properties in the database:");
-            showAllProperties(repo);
-
+            runMenu(repo);
         } finally {
             repo.close();
+            System.out.println("Goodbye!");
+        }
+    }
+
+    private static void runMenu(PropertyRepository repo) {
+        while (true) {
+            System.out.println("\n===== Real Estate Application =====");
+            System.out.println("1. Register a new property");
+            System.out.println("2. Show all properties");
+            System.out.println("3. Search properties by address");
+            System.out.println("0. Exit");
+            System.out.print("Choose an option: ");
+
+            String choice = scanner.nextLine();
+
+            switch (choice) {
+                case "1":
+                    Property p = createPropertyFromUserInput();
+                    repo.save(p);
+                    System.out.println("Property saved!");
+                    break;
+
+                case "2":
+                    showAllProperties(repo);
+                    break;
+
+                case "3":
+                    askUserToSearchByAddress(repo);
+                    break;
+
+                case "0":
+                    return; // exit the method → exit program
+
+                default:
+                    System.out.println("Invalid choice, please try again.");
+            }
         }
     }
 
@@ -103,5 +136,19 @@ public class Main {
     private static void showAllProperties(PropertyRepository repo) {
         List<Property> properties = repo.findAll();
         properties.forEach(System.out::println);
+    }
+
+    private static void askUserToSearchByAddress(PropertyRepository repo) {
+        System.out.print("\nEnter address search term: ");
+        String searchTerm = scanner.nextLine();
+
+        List<Property> results = repo.findByAddress(searchTerm);
+
+        if (results.isEmpty()) {
+            System.out.println("No properties found for search term: " + searchTerm);
+        } else {
+            System.out.println("Found properties:");
+            results.forEach(System.out::println);
+        }
     }
 }

@@ -13,25 +13,27 @@ public class PropertyRepositoryImpl implements PropertyRepository{
 
     @Override
     public void save(Property property) {
-        EntityManager em = emf.createEntityManager();
 
-        try {
+        try (EntityManager em = emf.createEntityManager()) {
             em.getTransaction().begin();
             em.persist(property);
             em.getTransaction().commit();
-        } finally {
-            em.close();
         }
     }
 
     @Override
     public List<Property> findAll() {
-        EntityManager em = emf.createEntityManager();
-        try {
-            return em.createQuery("SELECT p FROM Property p", Property.class)
+        try (EntityManager em = emf.createEntityManager()) {
+            return em.createQuery("SELECT p FROM Property p", Property.class).getResultList();
+        }
+    }
+
+    @Override
+    public List<Property> findByAddress(String searchTerms) {
+        try (EntityManager em = emf.createEntityManager()) {
+            return em.createQuery("SELECT p FROM Property p WHERE p.address LIKE :searchTerms", Property.class)
+                    .setParameter("searchTerms", "%" + searchTerms + "%")
                     .getResultList();
-        } finally {
-            em.close();
         }
     }
 
